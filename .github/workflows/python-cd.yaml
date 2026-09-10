@@ -1,4 +1,4 @@
-name: Flask CD
+name: Python Flask CD
 on:
   workflow_run:
     workflows:
