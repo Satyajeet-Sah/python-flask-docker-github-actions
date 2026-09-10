@@ -1,4 +1,5 @@
 name: Python Flask CD
+
 on:
   workflow_run:
     workflows:
@@ -12,23 +13,74 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Login to Docker Hub
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # 2. Pull the image produced by CI
       - name: Pull Docker Image
-        run: docker pull ${{ secrets.DOCKERHUB_USERNAME }}/python-flask-app:v1.0.0
+        run: |
+          docker pull \
+            ${{ secrets.DOCKERHUB_USERNAME }}/python-flask-app:v1.0.0
 
-      - name: Run Container
+      # 3. Run the application container
+      - name: Run Flask Container
         run: |
           docker run -d \
             -p 5000:5000 \
             --name flask-container \
             ${{ secrets.DOCKERHUB_USERNAME }}/python-flask-app:v1.0.0
 
-      - name: Smoke Test
+      # 4. Verify that the container is running
+      - name: Verify Container
         run: |
+          echo "Checking container status..."
+
+          if [ "$(docker inspect -f '{{.State.Running}}' flask-container)" != "true" ]; then
+            echo "❌ Container failed to start."
+            docker logs flask-container
+            exit 1
+          fi
+
+          echo "✅ Container is running."
+
+      # 5. Verify the deployed application
+      - name: Verify Application
+        run: |
+          echo "Waiting for Flask application to start..."
           sleep 5
-          curl http://localhost:5000
+
+          echo "Testing application endpoint..."
+
+          response=$(curl -s -w "\n%{http_code}" http://localhost:5000/)
+
+          body=$(echo "$response" | head -n 1)
+          status_code=$(echo "$response" | tail -n 1)
+
+          echo "HTTP Status Code: $status_code"
+          echo "Response: $body"
+
+          if [ "$status_code" != "200" ]; then
+            echo "❌ Application is not responding correctly."
+            docker logs flask-container
+            exit 1
+          fi
+
+          echo "✅ Application is running successfully."
+
+      # 6. Display logs
+      - name: Display Container Logs
+        if: always()
+        run: |
+          echo "========== Flask Container Logs =========="
+          docker logs flask-container
+
+      # 7. Cleanup
+      - name: Cleanup Container
+        if: always()
+        run: |
+          docker stop flask-container || true
+          docker rm flask-container || true
