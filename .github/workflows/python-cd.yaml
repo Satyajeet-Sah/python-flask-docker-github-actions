@@ -2,7 +2,7 @@ name: Python Flask CD
 on:
   workflow_run:
     workflows:
-      - Flask CI
+      - Python Flask CI
     types:
       - completed
 
